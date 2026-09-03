@@ -63,9 +63,19 @@ export async function PATCH(request:Request){
     if(!hasPermission(gate.access!,'members.update')) return NextResponse.json({error:'members.update is required to change account status.'},{status:403});
     await sql`update app.persons set account_status=${body.accountStatus},updated_at=now() where id=${body.personId}::uuid`;
   }
-  await sql`delete from app.person_roles pr using app.roles r where pr.role_id=r.id and pr.person_id=${body.personId}::uuid and r.is_system=false`;
+
+  // Preserve only the required identity base role. Administrator, President,
+  // Governing Board and all custom roles remain fully revocable.
+  await sql`
+    delete from app.person_roles pr
+    using app.roles r
+    where pr.role_id=r.id
+      and pr.person_id=${body.personId}::uuid
+      and r.key not in ('member','family_member')
+  `;
+
   for(const roleKey of keys){
-    await sql`insert into app.person_roles(person_id,role_id,assigned_by_person_id) select ${body.personId}::uuid,id,${gate.access!.personId}::uuid from app.roles where key=${roleKey} and is_active=true on conflict do nothing`;
+    await sql`insert into app.person_roles(person_id,role_id,assigned_by_person_id) select ${body.personId}::uuid,id,${gate.access!.personId}::uuid from app.roles where key=${roleKey} and is_active=true and key not in ('member','family_member') on conflict do nothing`;
   }
   await sql`insert into app.audit_logs(actor_person_id,action,object_type,object_id,after_data) values (${gate.access!.personId}::uuid,'member.access.update','person',${body.personId}::uuid,${JSON.stringify({roleKeys:keys,accountStatus:body.accountStatus})}::jsonb)`;
   return NextResponse.json(await payload());
