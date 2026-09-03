@@ -1,29 +1,27 @@
 {
   "name": "together-forever-network",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gsap/react": "2.1.2",
-    "@studio-freight/lenis": "1.0.42",
-    "gsap": "3.13.0",
+    "@neondatabase/serverless": "1.0.1",
+    "@tailwindcss/postcss": "4.1.12",
+    "lenis": "1.3.11",
     "lucide-react": "0.468.0",
     "next": "16.3.3",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "tailwindcss": "4.1.12"
   },
   "devDependencies": {
     "@types/node": "22.15.3",
     "@types/react": "19.1.2",
     "@types/react-dom": "19.1.2",
-    "eslint": "9.25.1",
-    "eslint-config-next": "16.3.3",
     "typescript": "5.8.3"
   }
 }
