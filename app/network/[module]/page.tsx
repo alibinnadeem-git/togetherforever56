@@ -4,7 +4,7 @@ import { accessForAuthUser } from '../../../lib/access';
 import ModuleClient from './module-client';
 
 export const dynamic='force-dynamic';
-const allowed=new Set(['events','opportunities','marketplace','fundraising','gallery','businesses','community','proposals']);
+const allowed=new Set(['events','opportunities','marketplace','fundraising','gallery','businesses','community','proposals','family-life']);
 type SessionUser={id:string};type SessionResult={user?:SessionUser|null;data?:{user?:SessionUser|null}|null};
 
 export default async function NetworkModulePage({params}:{params:Promise<{module:string}>}){
