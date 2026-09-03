@@ -2,6 +2,7 @@ import { db } from './db';
 
 export type AccessProfile = {
   personId: string;
+  familyGroupId: string | null;
   fullName: string;
   membershipCode: string | null;
   relationshipPrefix: string | null;
@@ -12,6 +13,7 @@ export type AccessProfile = {
 
 type AccessRow = {
   person_id: string;
+  family_group_id: string | null;
   full_name: string;
   membership_code: string | null;
   relationship_prefix: string | null;
@@ -25,6 +27,7 @@ export async function accessForAuthUser(authUserId: string): Promise<AccessProfi
   const result = await sql`
     select
       p.id::text as person_id,
+      p.family_group_id::text as family_group_id,
       p.full_name,
       mc.code as membership_code,
       rt.prefix as relationship_prefix,
@@ -41,7 +44,7 @@ export async function accessForAuthUser(authUserId: string): Promise<AccessProfi
     left join app.role_permissions rp on rp.role_id = r.id
     left join app.permissions perm on perm.id = rp.permission_id
     where p.auth_user_id::text = ${authUserId}
-    group by p.id, p.full_name, mc.code, rt.prefix, p.account_status
+    group by p.id, p.family_group_id, p.full_name, mc.code, rt.prefix, p.account_status
     limit 1
   `;
 
@@ -51,6 +54,7 @@ export async function accessForAuthUser(authUserId: string): Promise<AccessProfi
 
   return {
     personId: row.person_id,
+    familyGroupId: row.family_group_id,
     fullName: row.full_name,
     membershipCode: row.membership_code,
     relationshipPrefix: row.relationship_prefix,
