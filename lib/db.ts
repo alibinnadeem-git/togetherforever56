@@ -2,6 +2,19 @@ import { neon } from '@neondatabase/serverless';
 
 let cached: ReturnType<typeof neon> | null = null;
 
+export type PlatformCounts = {
+  persons: number;
+  families: number;
+  roles: number;
+  permissions: number;
+  audience_policies: number;
+  events: number;
+  opportunities: number;
+  listings: number;
+  campaigns: number;
+  open_transactions: number;
+};
+
 export function db() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is not configured');
@@ -11,9 +24,9 @@ export function db() {
   return cached;
 }
 
-export async function platformCounts() {
+export async function platformCounts(): Promise<PlatformCounts> {
   const sql = db();
-  const rows = await sql`
+  const result = await sql`
     select
       (select count(*)::int from app.persons) as persons,
       (select count(*)::int from app.family_groups) as families,
@@ -26,5 +39,7 @@ export async function platformCounts() {
       (select count(*)::int from app.campaigns where status in ('suggested','under_review','approved','active')) as campaigns,
       (select count(*)::int from app.transactions where status not in ('completed','cancelled','refunded')) as open_transactions
   `;
+  const rows = result as unknown as PlatformCounts[];
+  if (!rows[0]) throw new Error('Platform count query returned no rows');
   return rows[0];
 }
