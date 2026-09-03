@@ -5,6 +5,8 @@ import { db } from '../../../../lib/db';
 
 type SessionUser={id:string};
 type SessionResult={user?:SessionUser|null;data?:{user?:SessionUser|null}|null};
+type MembershipCodeRow={code:string;root_number:string;self_change_count:number;relationship_key:string};
+type MembershipHistoryRow={old_code:string;new_code:string;change_reason:string|null;changed_at:string};
 
 async function current(){
   const raw=(await auth.getSession()) as unknown as SessionResult;
@@ -18,8 +20,8 @@ async function current(){
 export async function GET(){
   const gate=await current(); if(gate.error) return gate.error;
   const sql=db();
-  const currentCode=await sql`select mc.code,mc.root_number,mc.self_change_count,rt.key as relationship_key from app.membership_codes mc join app.relationship_types rt on rt.id=mc.relationship_type_id where mc.person_id=${gate.access!.personId}::uuid limit 1`;
-  const history=await sql`select old_code,new_code,change_reason,changed_at from app.membership_code_history where person_id=${gate.access!.personId}::uuid order by changed_at desc limit 20`;
+  const currentCode=(await sql`select mc.code,mc.root_number,mc.self_change_count,rt.key as relationship_key from app.membership_codes mc join app.relationship_types rt on rt.id=mc.relationship_type_id where mc.person_id=${gate.access!.personId}::uuid limit 1`) as unknown as MembershipCodeRow[];
+  const history=(await sql`select old_code,new_code,change_reason,changed_at from app.membership_code_history where person_id=${gate.access!.personId}::uuid order by changed_at desc limit 20`) as unknown as MembershipHistoryRow[];
   return NextResponse.json({current:currentCode[0]||null,history});
 }
 
