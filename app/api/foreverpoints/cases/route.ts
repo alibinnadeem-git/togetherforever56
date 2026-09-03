@@ -1,0 +1,89 @@
+import { randomUUID } from 'node:crypto';
+import { NextResponse } from 'next/server';
+import { auth } from '../../../../lib/auth/server';
+import { accessForAuthUser, hasPermission } from '../../../../lib/access';
+import { db } from '../../../../lib/db';
+import { appendForeverPoints, foreverPointsSigningReady } from '../../../../lib/foreverpoints';
+
+type SessionUser={id:string};
+type SessionResult={user?:SessionUser|null;data?:{user?:SessionUser|null}|null};
+
+async function context(){
+  const raw=(await auth.getSession()) as unknown as SessionResult;
+  const user=raw.user??raw.data?.user??null;
+  if(!user?.id) return null;
+  return accessForAuthUser(user.id);
+}
+
+async function accountFor(personId:string){
+  const sql=db();
+  await sql`insert into app.foreverpoints_accounts(person_id) values (${personId}::uuid) on conflict (person_id) do nothing`;
+  const rows=await sql`select id::text from app.foreverpoints_accounts where person_id=${personId}::uuid limit 1`;
+  return (rows as unknown as Array<{id:string}>)[0]?.id;
+}
+
+export async function GET(){
+  const access=await context();
+  if(!access || access.accountStatus!=='active') return NextResponse.json({error:'Unauthorized'},{status:401});
+  const sql=db();
+  const review=hasPermission(access,'foreverpoints.case.review');
+  const cases=review
+    ? await sql`select c.*,p.full_name,mc.code as membership_code from app.foreverpoints_cases c join app.persons p on p.id=c.person_id left join app.membership_codes mc on mc.person_id=p.id order by c.created_at desc limit 250`
+    : await sql`select c.*,p.full_name,mc.code as membership_code from app.foreverpoints_cases c join app.persons p on p.id=c.person_id left join app.membership_codes mc on mc.person_id=p.id where c.person_id=${access.personId}::uuid order by c.created_at desc limit 100`;
+  return NextResponse.json({cases,canReview:review,canResolve:hasPermission(access,'foreverpoints.case.resolve'),signingReady:foreverPointsSigningReady()});
+}
+
+export async function POST(request:Request){
+  const access=await context();
+  if(!access || !hasPermission(access,'foreverpoints.case.create')) return NextResponse.json({error:'Forbidden'},{status:403});
+  const body=await request.json() as {caseType?:string;subject?:string;description?:string;originalLedgerId?:string;requestedPoints?:number};
+  const types=new Set(['activity_disputed','missing_points','wrong_amount','incorrect_deduction','refund_request','duplicate_transaction','failed_redemption','cancelled_activity','system_error','admin_error','fraud_review','expiry_dispute','transfer_error','service_not_delivered','other']);
+  if(!body.caseType||!types.has(body.caseType)||!body.subject?.trim()||!body.description?.trim()) return NextResponse.json({error:'Case type, subject and description are required.'},{status:400});
+  const accountId=await accountFor(access.personId);
+  if(!accountId) return NextResponse.json({error:'Unable to create ForeverPoints account.'},{status:500});
+  const suffix=randomUUID().replaceAll('-','').slice(0,10).toUpperCase();
+  const caseNumber=`FP-DSP-${suffix}`;
+  const sql=db();
+  const rows=await sql`
+    insert into app.foreverpoints_cases(case_number,person_id,account_id,original_ledger_id,case_type,subject,description,requested_points)
+    values(${caseNumber},${access.personId}::uuid,${accountId}::uuid,${body.originalLedgerId||null}::uuid,${body.caseType},${body.subject.trim()},${body.description.trim()},${body.requestedPoints??null})
+    returning *
+  `;
+  const row=(rows as unknown as Array<{id:string}>)[0];
+  await sql`insert into app.foreverpoints_case_events(case_id,event_type,actor_person_id,note) values (${row.id}::uuid,'submitted',${access.personId}::uuid,'Case submitted by member')`;
+  await sql`insert into app.audit_logs(actor_person_id,action,object_type,object_id,after_data) values (${access.personId}::uuid,'foreverpoints.case.create','foreverpoints_case',${row.id}::uuid,${JSON.stringify(body)}::jsonb)`;
+  return NextResponse.json(row,{status:201});
+}
+
+export async function PATCH(request:Request){
+  const access=await context();
+  if(!access || !hasPermission(access,'foreverpoints.case.resolve')) return NextResponse.json({error:'Forbidden'},{status:403});
+  const body=await request.json() as {caseId?:string;resolutionType?:string;resolutionNotes?:string;pointsDelta?:number};
+  if(!body.caseId||!body.resolutionType) return NextResponse.json({error:'Case and resolution are required.'},{status:400});
+  const sql=db();
+  const rows=await sql`select c.*,l.points_delta as original_points_delta from app.foreverpoints_cases c left join app.foreverpoints_ledger l on l.id=c.original_ledger_id where c.id=${body.caseId}::uuid limit 1`;
+  const c=(rows as unknown as Array<Record<string,unknown>>)[0];
+  if(!c) return NextResponse.json({error:'Case not found.'},{status:404});
+
+  const noLedger=new Set(['uphold','no_change']);
+  let ledger:Record<string,unknown>|null=null;
+  if(!noLedger.has(body.resolutionType)){
+    if(!foreverPointsSigningReady()) return NextResponse.json({error:'ForeverPoints signing secret is not configured; financial-grade points adjustments remain locked.'},{status:503});
+    const original=Number(c.original_points_delta||0);
+    let delta=Number(body.pointsDelta||0);
+    if(['reverse','refund'].includes(body.resolutionType)){
+      if(!original) return NextResponse.json({error:'A reversal/refund requires an original ledger transaction.'},{status:400});
+      delta=-original;
+    } else if(['correction_credit','goodwill_credit'].includes(body.resolutionType)) delta=Math.abs(delta);
+    else if(body.resolutionType==='correction_debit') delta=-Math.abs(delta);
+    if(!Number.isSafeInteger(delta)||delta===0) return NextResponse.json({error:'A non-zero whole-number points adjustment is required.'},{status:400});
+    ledger=await appendForeverPoints({accountId:String(c.account_id),personId:String(c.person_id),transactionType:['reverse','refund'].includes(body.resolutionType)?'reversal':'admin_adjustment',pointsDelta:delta,activityType:'case_resolution',sourceObjectType:'foreverpoints_case',sourceObjectId:String(c.id),relatedLedgerId:c.original_ledger_id?String(c.original_ledger_id):null,idempotencyKey:`case:${c.id}:resolution:${body.resolutionType}`,description:body.resolutionNotes||`Resolution ${body.resolutionType}`,createdByPersonId:access.personId});
+    await sql`insert into app.foreverpoints_case_ledger_links(case_id,ledger_id,link_type) values (${body.caseId}::uuid,${String(ledger.id)}::uuid,${['reverse','refund'].includes(body.resolutionType)?body.resolutionType==='refund'?'refund':'reversal':'correction'}) on conflict do nothing`;
+  }
+
+  const finalStatus=body.resolutionType==='refund'?'refunded':body.resolutionType==='reverse'?'reversed':['uphold','no_change'].includes(body.resolutionType)?'closed':'corrected';
+  await sql`update app.foreverpoints_cases set status=${finalStatus},resolution_type=${body.resolutionType},resolution_notes=${body.resolutionNotes||null},resolved_at=now(),closed_at=case when ${finalStatus}='closed' then now() else closed_at end,updated_at=now() where id=${body.caseId}::uuid`;
+  await sql`insert into app.foreverpoints_case_events(case_id,event_type,actor_person_id,note,metadata) values (${body.caseId}::uuid,'resolved',${access.personId}::uuid,${body.resolutionNotes||null},${JSON.stringify({resolutionType:body.resolutionType,ledger})}::jsonb)`;
+  await sql`insert into app.audit_logs(actor_person_id,action,object_type,object_id,after_data) values (${access.personId}::uuid,'foreverpoints.case.resolve','foreverpoints_case',${body.caseId}::uuid,${JSON.stringify({resolutionType:body.resolutionType,ledger})}::jsonb)`;
+  return NextResponse.json({ok:true,status:finalStatus,ledger});
+}
