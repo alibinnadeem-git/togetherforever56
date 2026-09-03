@@ -18,14 +18,20 @@ export default function MembersClient({canCreate,canUpdate,canAssign}:{canCreate
   const [roleKeys,setRoleKeys]=useState<string[]>([]);
   const [message,setMessage]=useState('');
   const [busy,setBusy]=useState(false);
+  const [editingId,setEditingId]=useState<string|null>(null);
+  const [editRoles,setEditRoles]=useState<string[]>([]);
+  const [editStatus,setEditStatus]=useState('active');
 
   async function load(){const r=await fetch('/api/admin/members',{cache:'no-store'});if(r.ok)setData(await r.json());}
   useEffect(()=>{void load();},[]);
   const unlinked=useMemo(()=>data.authUsers.filter(u=>!u.linked),[data.authUsers]);
   const selectedRelationship=data.relationships.find(r=>r.key===relationshipKey);
+  const assignableRoles=data.roles.filter(r=>!['member','family_member'].includes(r.key));
 
   function toggleRole(key:string){setRoleKeys(v=>v.includes(key)?v.filter(x=>x!==key):[...v,key]);}
+  function toggleEditRole(key:string){setEditRoles(v=>v.includes(key)?v.filter(x=>x!==key):[...v,key]);}
   function chooseUser(id:string){setAuthUserId(id);const u=data.authUsers.find(x=>x.id===id);if(u)setFullName(u.name||'');}
+  function startEdit(person:Person){setEditingId(person.id);setEditStatus(person.account_status);setEditRoles((person.role_keys||[]).filter(r=>!['member','family_member'].includes(r)));setMessage('');}
 
   async function create(){
     setBusy(true);setMessage('');
@@ -33,6 +39,15 @@ export default function MembersClient({canCreate,canUpdate,canAssign}:{canCreate
     const body=await r.json();
     if(!r.ok){setMessage(body.error||'Unable to link identity.');setBusy(false);return;}
     setMessage(`Identity linked as ${body.created?.membership_code||'member'}.`);setData(body);setAuthUserId('');setFullName('');setRelationshipKey('member');setRootNumber('');setOrdinal('');setRoleKeys([]);setBusy(false);
+  }
+
+  async function saveAccess(){
+    if(!editingId) return;
+    setBusy(true);setMessage('');
+    const r=await fetch('/api/admin/members',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({personId:editingId,roleKeys:editRoles,accountStatus:editStatus})});
+    const body=await r.json();
+    if(!r.ok){setMessage(body.error||'Unable to update member access.');setBusy(false);return;}
+    setData(body);setEditingId(null);setEditRoles([]);setMessage('Member access updated.');setBusy(false);
   }
 
   return <div className="space-y-6">
@@ -49,14 +64,27 @@ export default function MembersClient({canCreate,canUpdate,canAssign}:{canCreate
         <label className="text-sm">{relationshipKey==='member'?'Five-digit member root (optional — generate if blank)':'Existing five-digit family root'}<input value={rootNumber} onChange={e=>setRootNumber(e.target.value.replace(/\D/g,'').slice(0,5))} inputMode="numeric" placeholder="56271" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 font-mono"/></label>
         {selectedRelationship?.requires_ordinal&&<label className="text-sm">Ordinal (optional — next available if blank)<input value={ordinal} onChange={e=>setOrdinal(e.target.value.replace(/\D/g,''))} inputMode="numeric" placeholder="1" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3"/></label>}
       </div>
-      {canAssign&&<div className="mt-5"><div className="text-sm font-medium">Additional roles</div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{data.roles.map(r=><label key={r.key} className="flex gap-3 rounded-xl border border-white/10 bg-black/15 p-3 text-sm"><input type="checkbox" checked={roleKeys.includes(r.key)} onChange={()=>toggleRole(r.key)}/><span><span className="font-medium">{r.name}</span>{r.description&&<span className="mt-1 block text-xs text-white/45">{r.description}</span>}</span></label>)}</div></div>}
+      {canAssign&&<div className="mt-5"><div className="text-sm font-medium">Additional roles</div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{assignableRoles.map(r=><label key={r.key} className="flex gap-3 rounded-xl border border-white/10 bg-black/15 p-3 text-sm"><input type="checkbox" checked={roleKeys.includes(r.key)} onChange={()=>toggleRole(r.key)}/><span><span className="font-medium">{r.name}</span>{r.description&&<span className="mt-1 block text-xs text-white/45">{r.description}</span>}</span></label>)}</div></div>}
       {message&&<div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white/70">{message}</div>}
       <button onClick={()=>void create()} disabled={busy||!authUserId||!fullName.trim()||((relationshipKey!=='member')&&rootNumber.length!==5)} className="mt-6 rounded-xl bg-amber-300 px-5 py-3 font-semibold text-[#07120b] disabled:opacity-40">{busy?'Linking…':'Verify & Link Identity'}</button>
     </section>}
 
     <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 sm:p-7">
       <h2 className="text-xl font-semibold">Linked identities</h2>
-      <div className="mt-5 grid gap-3 md:grid-cols-2">{data.persons.map(p=><article key={p.id} className="rounded-2xl border border-white/10 bg-black/15 p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold">{p.full_name}</div><div className="mt-1 font-mono text-xs text-amber-200">{p.membership_code||'Code pending'}</div></div><span className="rounded-full bg-white/5 px-2 py-1 text-[10px] uppercase text-white/55">{p.account_status}</span></div><div className="mt-3 text-xs text-white/45">{p.relationship_label||p.relationship_key||'Identity'} · root {p.root_number||'—'}</div><div className="mt-3 flex flex-wrap gap-1">{(p.role_keys||[]).map(r=><span key={r} className="rounded-full border border-white/10 px-2 py-1 text-[10px] text-white/60">{r}</span>)}</div>{(canUpdate||canAssign)&&<div className="mt-3 text-[10px] text-white/35">Role/status editing is enabled by your assigned permissions and remains server-enforced.</div>}</article>)}</div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2">{data.persons.map(p=>{
+        const editing=editingId===p.id;
+        return <article key={p.id} className="rounded-2xl border border-white/10 bg-black/15 p-4">
+          <div className="flex items-start justify-between gap-3"><div><div className="font-semibold">{p.full_name}</div><div className="mt-1 font-mono text-xs text-amber-200">{p.membership_code||'Code pending'}</div></div><span className="rounded-full bg-white/5 px-2 py-1 text-[10px] uppercase text-white/55">{p.account_status}</span></div>
+          <div className="mt-3 text-xs text-white/45">{p.relationship_label||p.relationship_key||'Identity'} · root {p.root_number||'—'}</div>
+          <div className="mt-3 flex flex-wrap gap-1">{(p.role_keys||[]).map(r=><span key={r} className="rounded-full border border-white/10 px-2 py-1 text-[10px] text-white/60">{r}</span>)}</div>
+          {!editing&&(canUpdate||canAssign)&&<button onClick={()=>startEdit(p)} className="mt-4 rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-white/70 hover:bg-white/5">Edit access</button>}
+          {editing&&<div className="mt-4 space-y-4 rounded-xl border border-white/10 bg-black/20 p-4">
+            {canUpdate&&<label className="block text-xs">Account status<select value={editStatus} onChange={e=>setEditStatus(e.target.value)} className="mt-2 w-full rounded-lg border border-white/10 bg-[#071a11] px-3 py-2"><option value="pending">Pending</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="archived">Archived</option><option value="deceased">Deceased</option></select></label>}
+            {canAssign&&<div><div className="text-xs font-medium">Assigned responsibilities</div><div className="mt-2 space-y-2">{assignableRoles.map(r=><label key={r.key} className="flex items-start gap-2 text-xs"><input type="checkbox" checked={editRoles.includes(r.key)} onChange={()=>toggleEditRole(r.key)} className="mt-0.5"/><span>{r.name}</span></label>)}</div></div>}
+            <div className="flex gap-2"><button onClick={()=>void saveAccess()} disabled={busy} className="rounded-lg bg-amber-300 px-3 py-2 text-xs font-semibold text-[#07120b] disabled:opacity-50">{busy?'Saving…':'Save access'}</button><button onClick={()=>setEditingId(null)} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60">Cancel</button></div>
+          </div>}
+        </article>;
+      })}</div>
     </section>
   </div>;
 }
