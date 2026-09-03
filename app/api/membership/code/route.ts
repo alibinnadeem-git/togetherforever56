@@ -1,0 +1,49 @@
+import { NextResponse } from 'next/server';
+import { auth } from '../../../../lib/auth/server';
+import { accessForAuthUser, hasPermission } from '../../../../lib/access';
+import { db } from '../../../../lib/db';
+
+type SessionUser={id:string};
+type SessionResult={user?:SessionUser|null;data?:{user?:SessionUser|null}|null};
+
+async function current(){
+  const raw=(await auth.getSession()) as unknown as SessionResult;
+  const user=raw.user??raw.data?.user??null;
+  if(!user?.id) return {error:NextResponse.json({error:'Unauthorized'},{status:401})};
+  const access=await accessForAuthUser(user.id);
+  if(!access||access.accountStatus!=='active') return {error:NextResponse.json({error:'Forbidden'},{status:403})};
+  return {access};
+}
+
+export async function GET(){
+  const gate=await current(); if(gate.error) return gate.error;
+  const sql=db();
+  const currentCode=await sql`select mc.code,mc.root_number,mc.self_change_count,rt.key as relationship_key from app.membership_codes mc join app.relationship_types rt on rt.id=mc.relationship_type_id where mc.person_id=${gate.access!.personId}::uuid limit 1`;
+  const history=await sql`select old_code,new_code,change_reason,changed_at from app.membership_code_history where person_id=${gate.access!.personId}::uuid order by changed_at desc limit 20`;
+  return NextResponse.json({current:currentCode[0]||null,history});
+}
+
+export async function POST(request:Request){
+  const gate=await current(); if(gate.error) return gate.error;
+  if(gate.access!.relationshipPrefix!=='M') return NextResponse.json({error:'Only the alumni member may change the family root number.'},{status:403});
+  const body=(await request.json()) as {newRoot?:string;reason?:string};
+  const newRoot=body.newRoot?.trim();
+  if(!newRoot||!/^\d{5}$/.test(newRoot)) return NextResponse.json({error:'New root must contain exactly five digits.'},{status:400});
+  try{
+    const sql=db();
+    const changed=await sql`select * from app.change_family_membership_root(${gate.access!.personId}::uuid,${newRoot},${gate.access!.personId}::uuid,false,${body.reason?.trim()||'One-time member self-service change'})`;
+    return NextResponse.json({changed});
+  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Unable to change membership number.'},{status:400});}
+}
+
+export async function PATCH(request:Request){
+  const gate=await current(); if(gate.error) return gate.error;
+  if(!hasPermission(gate.access!,'members.update')) return NextResponse.json({error:'Forbidden'},{status:403});
+  const body=(await request.json()) as {memberPersonId?:string;newRoot?:string;reason?:string};
+  if(!body.memberPersonId||!body.newRoot||!/^\d{5}$/.test(body.newRoot)) return NextResponse.json({error:'Member person id and five-digit root are required.'},{status:400});
+  try{
+    const sql=db();
+    const changed=await sql`select * from app.change_family_membership_root(${body.memberPersonId}::uuid,${body.newRoot},${gate.access!.personId}::uuid,true,${body.reason?.trim()||'Administrator membership root change'})`;
+    return NextResponse.json({changed});
+  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Unable to change membership number.'},{status:400});}
+}
