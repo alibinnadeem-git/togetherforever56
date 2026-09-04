@@ -72,8 +72,8 @@ body { margin: 0; min-height: 100vh; background: #f8fafc; color: #0f172a; }
   background: radial-gradient(circle,rgba(250,204,21,.22),transparent 65%);
   transform: translateZ(90px);
 }
-.heritage-track { transform-style: preserve-3d; }
-.heritage-card { perspective: 1400px; transform-style: preserve-3d; }
+.heritage-track,.heritage-timeline { transform-style: preserve-3d; }
+.heritage-card,.heritage-plane { perspective: 1400px; transform-style: preserve-3d; }
 .heritage-card-inner {
   position: relative;
   transform-style: preserve-3d;
@@ -83,18 +83,22 @@ body { margin: 0; min-height: 100vh; background: #f8fafc; color: #0f172a; }
 }
 .heritage-card:nth-child(even) .heritage-card-inner { transform: translateZ(var(--heritage-z,0px)) translateX(3.5%) rotateY(-2deg); }
 .heritage-card:nth-child(odd) .heritage-card-inner { transform: translateZ(var(--heritage-z,0px)) translateX(-3.5%) rotateY(2deg); }
+.heritage-plane { transition: transform .45s cubic-bezier(.2,.8,.2,1), border-color .3s ease, background .3s ease; box-shadow: 0 30px 70px rgba(0,0,0,.2); }
+.heritage-plane.heritage-left { transform: translateX(-2.5%) rotateY(2deg) translateZ(18px); }
+.heritage-plane.heritage-right { transform: translateX(2.5%) rotateY(-2deg) translateZ(36px); }
 
 @media (hover:hover) and (prefers-reduced-motion:no-preference) {
   .tf-card:hover { transform: translateY(-5px) translateZ(12px); box-shadow: 0 24px 48px rgba(15,23,42,.14); }
   .heritage-card-inner:hover { transform: translateZ(calc(var(--heritage-z,0px) + 26px)) translateX(0) rotateY(0deg) scale(1.01); border-color: rgba(250,204,21,.24); background: rgba(255,255,255,.055); }
+  .heritage-plane:hover { transform: translateX(0) rotateY(0deg) translateZ(58px) scale(1.01); border-color: rgba(250,204,21,.24); background: rgba(255,255,255,.055); }
 }
 @keyframes drift { from { translate: 0 0; rotate: 0deg; } to { translate: 14px -12px; rotate: 8deg; } }
 @media (max-width: 767px) {
   .heritage-stage { perspective: none; }
-  .heritage-card-inner,.heritage-card:nth-child(even) .heritage-card-inner,.heritage-card:nth-child(odd) .heritage-card-inner { transform: none; }
+  .heritage-card-inner,.heritage-card:nth-child(even) .heritage-card-inner,.heritage-card:nth-child(odd) .heritage-card-inner,.heritage-plane,.heritage-plane.heritage-left,.heritage-plane.heritage-right { transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   .heritage-stage { perspective: none; }
-  .heritage-card-inner,.heritage-card:nth-child(even) .heritage-card-inner,.heritage-card:nth-child(odd) .heritage-card-inner { transform: none !important; }
+  .heritage-card-inner,.heritage-card:nth-child(even) .heritage-card-inner,.heritage-card:nth-child(odd) .heritage-card-inner,.heritage-plane,.heritage-plane.heritage-left,.heritage-plane.heritage-right { transform: none !important; }
 }
