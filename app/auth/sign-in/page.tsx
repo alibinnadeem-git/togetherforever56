@@ -34,7 +34,7 @@ export default function SignInPage() {
     try{
       const result=await authClient.requestPasswordReset({email:email.trim(),redirectTo:RESET_REDIRECT});
       if(result.error){setError(result.error.message||'Unable to send password setup email.');return;}
-      setMessage('Check your email for the secure password setup/reset link.');
+      setMessage('Password setup email sent. Open the secure link in your email to create or replace your password.');
     }catch{setError('Unable to send password setup email. Please try again.');}
     finally{setResetBusy(false);}
   }
@@ -53,7 +53,11 @@ export default function SignInPage() {
         {message ? <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">{message}</p> : null}
         <button disabled={busy} type="submit" className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-5 py-3.5 font-semibold text-[#07120b] transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60"><LogIn className="h-5 w-5" /> {busy ? 'Signing in…' : 'Sign In'}</button>
       </form>
-      <button type="button" disabled={resetBusy} onClick={()=>void requestPasswordSetup()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white/80 hover:bg-white/10 disabled:opacity-60"><KeyRound className="h-4 w-4"/>{resetBusy?'Sending…':'Set / Reset Password'}</button>
+      <div className="mt-5 rounded-2xl border border-amber-300/15 bg-amber-300/[.06] p-4">
+        <p className="text-sm font-semibold text-amber-100">First-time access or forgot your password?</p>
+        <p className="mt-1 text-xs leading-5 text-white/55">Enter your email above, then use the secure email link to create a password. This is also the activation path for pre-created member and administrator accounts.</p>
+        <button type="button" disabled={resetBusy} onClick={()=>void requestPasswordSetup()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-60"><KeyRound className="h-4 w-4"/>{resetBusy?'Sending…':'Set Up / Reset Password'}</button>
+      </div>
       <div className="mt-7 border-t border-white/10 pt-6 text-sm text-white/55">Need access? <Link href="/auth/sign-up" className="font-semibold text-amber-300">Create a pending account</Link>. Membership and family access still require administrator verification.</div>
     </section>
   </main>;
