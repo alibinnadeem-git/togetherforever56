@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import Lenis from 'lenis';
-import { Shield, Users, CalendarDays, BriefcaseBusiness, Store, HeartHandshake, GraduationCap, Landmark, Images, ArrowRight, LockKeyhole, Search, Plus } from 'lucide-react';
+import { Shield, Users, CalendarDays, BriefcaseBusiness, Store, HeartHandshake, GraduationCap, Landmark, Images, ArrowRight, LockKeyhole, Search, Plus, LogIn, UserPlus } from 'lucide-react';
 
 const modules = [
   { title: 'Members & Families', text: 'Alumni identities, family access, chapters, circles and privacy-aware networking.', icon: Users },
@@ -35,7 +35,7 @@ export default function HomePage() {
       <section className="tf-hero min-h-[82vh] text-white">
         <div className="tf-orb one" />
         <div className="tf-orb two" />
-        <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 md:px-8">
+        <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 py-5 md:px-8">
           <div className="flex items-center gap-3">
             <div className="rounded-2xl border border-yellow-300/30 bg-white/10 p-2.5 backdrop-blur"><Shield className="h-7 w-7 text-yellow-300" /></div>
             <div>
@@ -43,7 +43,10 @@ export default function HomePage() {
               <div className="text-xs font-medium text-yellow-200">Brotherhood • Est. 1977</div>
             </div>
           </div>
-          <a href="#network" className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/20">Explore Network</a>
+          <div className="flex items-center gap-2">
+            <a href="/auth/sign-up" className="hidden rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/20 sm:inline-flex">Request Access</a>
+            <a href="/auth/sign-in" className="inline-flex items-center gap-2 rounded-full bg-yellow-300 px-4 py-2 text-sm font-bold text-green-950 shadow-lg shadow-black/20 transition hover:bg-yellow-200"><LogIn className="h-4 w-4"/> Sign In</a>
+          </div>
         </header>
 
         <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-12 px-5 pb-20 pt-20 md:grid-cols-[1.2fr_.8fr] md:px-8 md:pt-28">
@@ -52,9 +55,10 @@ export default function HomePage() {
             <h1 className="max-w-4xl text-5xl font-black leading-[.95] tracking-[-.05em] md:text-7xl">Brotherhood forged.<br/><span className="text-yellow-300">Legacy eternal.</span></h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-emerald-50/85 md:text-lg">A private, multigenerational alumni and family network for heritage, opportunity, community, governance and support—designed to stay simple as it grows.</p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <a href="#network" className="inline-flex items-center gap-2 rounded-xl bg-yellow-300 px-5 py-3 font-bold text-green-950 shadow-xl shadow-black/20">Enter the vision <ArrowRight className="h-4 w-4" /></a>
-              <a href="/api/health" className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-3 font-semibold backdrop-blur"><LockKeyhole className="h-4 w-4" /> Platform health</a>
+              <a href="/auth/sign-in" className="inline-flex items-center gap-2 rounded-xl bg-yellow-300 px-5 py-3 font-bold text-green-950 shadow-xl shadow-black/20">Sign in to Network <ArrowRight className="h-4 w-4" /></a>
+              <a href="/auth/sign-up" className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-3 font-semibold backdrop-blur"><UserPlus className="h-4 w-4"/> Request Access</a>
             </div>
+            <p className="mt-3 text-xs text-emerald-50/60">Accounts do not receive Network access until an authorized administrator links them to a verified Together Forever member or family record.</p>
           </div>
 
           <div className="tf-card rounded-[2rem] border border-white/15 bg-white/10 p-5 shadow-2xl backdrop-blur-xl md:p-7">
@@ -82,7 +86,7 @@ export default function HomePage() {
         <div className="max-w-3xl">
           <div className="text-sm font-bold uppercase tracking-[.18em] text-green-700">Together Forever Network</div>
           <h2 className="mt-3 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">Everything we designed, kept simple.</h2>
-          <p className="mt-5 text-lg leading-8 text-slate-600">The production platform will use shared identity, RBAC, audience-policy, workflow, transaction and audit engines so new capabilities do not become separate disconnected systems.</p>
+          <p className="mt-5 text-lg leading-8 text-slate-600">The production platform uses shared identity, RBAC, audience-policy, workflow, transaction and audit engines so new capabilities do not become separate disconnected systems.</p>
         </div>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {modules.map(({ title, text, icon: Icon }) => (
@@ -112,7 +116,7 @@ export default function HomePage() {
         <div className="rounded-[2rem] bg-green-950 p-7 text-white md:p-12">
           <div className="flex flex-col justify-between gap-8 md:flex-row md:items-center">
             <div><div className="text-sm font-bold uppercase tracking-[.18em] text-yellow-300">Built for the next decade</div><h2 className="mt-2 text-3xl font-black">One create action. One policy language. One workflow model.</h2></div>
-            <div className="inline-flex items-center gap-2 rounded-xl bg-yellow-300 px-5 py-3 font-bold text-green-950"><Plus className="h-5 w-5" /> Create anything</div>
+            <a href="/auth/sign-in" className="inline-flex items-center gap-2 rounded-xl bg-yellow-300 px-5 py-3 font-bold text-green-950"><LogIn className="h-5 w-5" /> Sign In</a>
           </div>
         </div>
       </section>
