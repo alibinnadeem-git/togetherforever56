@@ -32,10 +32,69 @@ body { margin: 0; min-height: 100vh; background: #f8fafc; color: #0f172a; }
 .tf-orb.one { width: 280px; height: 280px; right: -60px; top: 80px; background: rgba(250,204,21,.26); transform: translateZ(80px); }
 .tf-orb.two { width: 180px; height: 180px; left: -50px; bottom: 40px; background: rgba(34,197,94,.28); animation-delay: -4s; transform: translateZ(40px); }
 .tf-card { transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease; transform-style: preserve-3d; }
+
+.heritage-stage {
+  position: relative;
+  overflow: clip;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(250,204,21,.12), transparent 28%),
+    radial-gradient(circle at 20% 32%, rgba(34,197,94,.09), transparent 24%),
+    linear-gradient(180deg,#03120a 0%,#06150d 45%,#020806 100%);
+  perspective: 1600px;
+}
+.heritage-stage::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .18;
+  background-image:
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to bottom,black,transparent 78%);
+}
+.heritage-hero {
+  position: relative;
+  overflow: hidden;
+  transform-style: preserve-3d;
+  background: linear-gradient(145deg,rgba(250,204,21,.07),rgba(255,255,255,.03) 45%,rgba(34,197,94,.04));
+  box-shadow: 0 40px 100px rgba(0,0,0,.25);
+}
+.heritage-hero::after {
+  content: "";
+  position: absolute;
+  width: 360px;
+  height: 360px;
+  right: -120px;
+  top: -120px;
+  border-radius: 999px;
+  background: radial-gradient(circle,rgba(250,204,21,.22),transparent 65%);
+  transform: translateZ(90px);
+}
+.heritage-track { transform-style: preserve-3d; }
+.heritage-card { perspective: 1400px; transform-style: preserve-3d; }
+.heritage-card-inner {
+  position: relative;
+  transform-style: preserve-3d;
+  transform: translateZ(var(--heritage-z,0px)) rotateX(.01deg);
+  box-shadow: 0 30px 70px rgba(0,0,0,.22);
+  transition: transform .45s cubic-bezier(.2,.8,.2,1), border-color .3s ease, background .3s ease;
+}
+.heritage-card:nth-child(even) .heritage-card-inner { transform: translateZ(var(--heritage-z,0px)) translateX(3.5%) rotateY(-2deg); }
+.heritage-card:nth-child(odd) .heritage-card-inner { transform: translateZ(var(--heritage-z,0px)) translateX(-3.5%) rotateY(2deg); }
+
 @media (hover:hover) and (prefers-reduced-motion:no-preference) {
   .tf-card:hover { transform: translateY(-5px) translateZ(12px); box-shadow: 0 24px 48px rgba(15,23,42,.14); }
+  .heritage-card-inner:hover { transform: translateZ(calc(var(--heritage-z,0px) + 26px)) translateX(0) rotateY(0deg) scale(1.01); border-color: rgba(250,204,21,.24); background: rgba(255,255,255,.055); }
 }
 @keyframes drift { from { translate: 0 0; rotate: 0deg; } to { translate: 14px -12px; rotate: 8deg; } }
+@media (max-width: 767px) {
+  .heritage-stage { perspective: none; }
+  .heritage-card-inner,.heritage-card:nth-child(even) .heritage-card-inner,.heritage-card:nth-child(odd) .heritage-card-inner { transform: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .heritage-stage { perspective: none; }
+  .heritage-card-inner,.heritage-card:nth-child(even) .heritage-card-inner,.heritage-card:nth-child(odd) .heritage-card-inner { transform: none !important; }
 }
