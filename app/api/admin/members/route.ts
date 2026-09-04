@@ -19,7 +19,7 @@ async function actor(permission:string){
 async function payload(){
   const sql=db();
   const authUsers=await sql`select u.id::text,u.name,u.email,u."emailVerified" as email_verified,u."createdAt" as created_at, exists(select 1 from app.persons p where p.auth_user_id=u.id) as linked from neon_auth."user" u order by u."createdAt" desc`;
-  const persons=await sql`select p.id::text,p.full_name,p.email,p.account_status,mc.code as membership_code,rt.key as relationship_key,rt.label as relationship_label,fg.root_number,coalesce(array_agg(distinct r.key) filter(where r.key is not null),'{}') as role_keys from app.persons p left join app.membership_codes mc on mc.person_id=p.id left join app.relationship_types rt on rt.id=p.relationship_type_id left join app.family_groups fg on fg.id=p.family_group_id left join app.person_roles pr on pr.person_id=p.id and (pr.ends_at is null or pr.ends_at>now()) left join app.roles r on r.id=pr.role_id group by p.id,mc.code,rt.key,rt.label,fg.root_number order by p.created_at desc`;
+  const persons=await sql`select p.id::text,p.full_name,p.email,p.account_status,p.auth_user_id::text,mc.code as membership_code,rt.key as relationship_key,rt.label as relationship_label,fg.root_number,coalesce(array_agg(distinct r.key) filter(where r.key is not null),'{}') as role_keys,exists(select 1 from neon_auth.account na where na."userId"=p.auth_user_id and na."providerId"='credential' and na.password is not null) as password_configured,exists(select 1 from neon_auth.session ns where ns."userId"=p.auth_user_id and ns."expiresAt">now()) as has_active_session from app.persons p left join app.membership_codes mc on mc.person_id=p.id left join app.relationship_types rt on rt.id=p.relationship_type_id left join app.family_groups fg on fg.id=p.family_group_id left join app.person_roles pr on pr.person_id=p.id and (pr.starts_at is null or pr.starts_at<=now()) and (pr.ends_at is null or pr.ends_at>now()) left join app.roles r on r.id=pr.role_id group by p.id,mc.code,rt.key,rt.label,fg.root_number order by p.created_at desc`;
   const relationships=await sql`select key,label,prefix,requires_ordinal,is_adult,can_login from app.relationship_types where is_active=true order by case when key='member' then 0 else 1 end,label`;
   const roles=await sql`select key,name,description,is_system,is_active from app.roles where is_active=true order by is_system desc,name`;
   return {authUsers,persons,relationships,roles};
@@ -63,17 +63,7 @@ export async function PATCH(request:Request){
     if(!hasPermission(gate.access!,'members.update')) return NextResponse.json({error:'members.update is required to change account status.'},{status:403});
     await sql`update app.persons set account_status=${body.accountStatus},updated_at=now() where id=${body.personId}::uuid`;
   }
-
-  // Preserve only the required identity base role. Administrator, President,
-  // Governing Board and all custom roles remain fully revocable.
-  await sql`
-    delete from app.person_roles pr
-    using app.roles r
-    where pr.role_id=r.id
-      and pr.person_id=${body.personId}::uuid
-      and r.key not in ('member','family_member')
-  `;
-
+  await sql`delete from app.person_roles pr using app.roles r where pr.role_id=r.id and pr.person_id=${body.personId}::uuid and r.key not in ('member','family_member')`;
   for(const roleKey of keys){
     await sql`insert into app.person_roles(person_id,role_id,assigned_by_person_id) select ${body.personId}::uuid,id,${gate.access!.personId}::uuid from app.roles where key=${roleKey} and is_active=true and key not in ('member','family_member') on conflict do nothing`;
   }
