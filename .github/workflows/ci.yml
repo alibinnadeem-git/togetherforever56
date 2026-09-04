@@ -11,9 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      NEON_AUTH_BASE_URL: ${{ secrets.NEON_AUTH_BASE_URL }}
-      NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET }}
+      # Build-only placeholders. CI validates compilation/type safety without
+      # connecting to production Neon or requiring repository secrets.
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/togetherforever_ci
+      NEON_AUTH_BASE_URL: https://ci-auth.invalid
+      NEON_AUTH_COOKIE_SECRET: ci-only-cookie-secret-00000000000000000000000000000000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
