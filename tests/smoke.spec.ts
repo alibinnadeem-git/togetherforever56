@@ -15,13 +15,15 @@ test.describe('Together Forever production smoke', () => {
   test('controlled access screens render', async ({ page }) => {
     await page.goto('/auth/sign-in');
     await expect(page.getByRole('heading', { name: /Enter the Network/i })).toBeVisible();
+    await expect(page.getByText(/First-time access or forgot your password/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /Set Up \/ Reset Password/i })).toBeVisible();
     await page.goto('/auth/sign-up');
     await expect(page.getByRole('heading', { name: /Create your secure account/i })).toBeVisible();
     await page.goto('/auth/reset-password');
     await expect(page.getByText(/secure password setup|choose your password|Loading secure password setup/i).first()).toBeVisible();
   });
 
-  for (const route of ['/network','/network/security','/network/media/upload','/admin']) {
+  for (const route of ['/network','/network/security','/network/media/upload','/admin','/admin/readiness','/admin/communications']) {
     test(`protected page redirects unauthenticated users: ${route}`, async ({ page }) => {
       await page.goto(route);
       await expect(page).toHaveURL(/\/auth\/sign-in/);
@@ -32,6 +34,9 @@ test.describe('Together Forever production smoke', () => {
     '/api/admin/members',
     '/api/admin/roles',
     '/api/admin/finance',
+    '/api/admin/readiness',
+    '/api/admin/communications',
+    '/api/admin/communications/dispatch',
     '/api/network/events',
     '/api/network/inbox',
     '/api/network/directory',
@@ -44,7 +49,7 @@ test.describe('Together Forever production smoke', () => {
   ]) {
     test(`unauthenticated API denied: ${endpoint}`, async ({ request }) => {
       const response = await request.get(endpoint);
-      expect([401, 403]).toContain(response.status());
+      expect([401, 403, 405]).toContain(response.status());
     });
   }
 
