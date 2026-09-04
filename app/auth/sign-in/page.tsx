@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Shield, LogIn, ArrowLeft } from 'lucide-react';
+import { Shield, LogIn, ArrowLeft, KeyRound } from 'lucide-react';
 import { authClient } from '../../../lib/auth/client';
 
 export default function SignInPage() {
@@ -11,16 +11,30 @@ export default function SignInPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError('');
+    event.preventDefault(); setBusy(true); setError(''); setMessage('');
     try {
       const result = await authClient.signIn.email({ email, password });
       if (result.error) { setError(result.error.message || 'Unable to sign in.'); return; }
       router.replace('/network'); router.refresh();
     } catch { setError('Unable to sign in. Please try again.'); }
     finally { setBusy(false); }
+  }
+
+  async function requestPasswordSetup(){
+    setError(''); setMessage('');
+    if(!email.trim()){setError('Enter your email first.');return;}
+    setResetBusy(true);
+    try{
+      const result=await authClient.requestPasswordReset({email:email.trim(),redirectTo:`${window.location.origin}/auth/reset-password`});
+      if(result.error){setError(result.error.message||'Unable to send password setup email.');return;}
+      setMessage('Check your email for the secure password setup/reset link.');
+    }catch{setError('Unable to send password setup email. Please try again.');}
+    finally{setResetBusy(false);}
   }
 
   return <main className="min-h-screen bg-[#06150d] text-white flex items-center justify-center px-4 py-10">
@@ -34,8 +48,10 @@ export default function SignInPage() {
         <label className="block"><span className="mb-2 block text-sm font-medium">Email</span><input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 outline-none transition focus:border-amber-300/60 focus:ring-2 focus:ring-amber-300/10" /></label>
         <label className="block"><span className="mb-2 block text-sm font-medium">Password</span><input required type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 outline-none transition focus:border-amber-300/60 focus:ring-2 focus:ring-amber-300/10" /></label>
         {error ? <p role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">{error}</p> : null}
+        {message ? <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">{message}</p> : null}
         <button disabled={busy} type="submit" className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-5 py-3.5 font-semibold text-[#07120b] transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60"><LogIn className="h-5 w-5" /> {busy ? 'Signing in…' : 'Sign In'}</button>
       </form>
+      <button type="button" disabled={resetBusy} onClick={()=>void requestPasswordSetup()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white/80 hover:bg-white/10 disabled:opacity-60"><KeyRound className="h-4 w-4"/>{resetBusy?'Sending…':'Set / Reset Password'}</button>
       <div className="mt-7 border-t border-white/10 pt-6 text-sm text-white/55">Need access? <Link href="/auth/sign-up" className="font-semibold text-amber-300">Create a pending account</Link>. Membership and family access still require administrator verification.</div>
     </section>
   </main>;
