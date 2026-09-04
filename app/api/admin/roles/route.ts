@@ -2,127 +2,16 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../lib/auth/server';
 import { accessForAuthUser, hasPermission } from '../../../../lib/access';
 import { db } from '../../../../lib/db';
+import { requireStepUp } from '../../../../lib/security/step-up';
 
 type SessionUser = { id: string };
 type SessionResult = { user?: SessionUser | null; data?: { user?: SessionUser | null } | null };
+type RoleInput = { id?: string; key?: string; name?: string; description?: string | null; isActive?: boolean; permissionKeys?: string[] };
 
-type RoleInput = {
-  id?: string;
-  key?: string;
-  name?: string;
-  description?: string | null;
-  isActive?: boolean;
-  permissionKeys?: string[];
-};
-
-async function actor(requiredPermission: string) {
-  const raw = (await auth.getSession()) as unknown as SessionResult;
-  const user = raw.user ?? raw.data?.user ?? null;
-  if (!user?.id) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  const access = await accessForAuthUser(user.id);
-  if (!hasPermission(access, requiredPermission)) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  }
-  return { access };
-}
-
-async function rolePayload() {
-  const sql = db();
-  const roles = (await sql`
-    select r.id::text, r.key, r.name, r.description, r.is_system, r.is_active,
-      coalesce(array_agg(p.key order by p.key) filter (where p.key is not null), '{}') as permission_keys
-    from app.roles r
-    left join app.role_permissions rp on rp.role_id = r.id
-    left join app.permissions p on p.id = rp.permission_id
-    group by r.id
-    order by r.is_system desc, r.name
-  `) as unknown as Array<Record<string, unknown>>;
-
-  const permissions = (await sql`
-    select id::text, key, domain, action, description, is_sensitive
-    from app.permissions
-    order by domain, key
-  `) as unknown as Array<Record<string, unknown>>;
-
-  return { roles, permissions };
-}
-
-export async function GET() {
-  const gate = await actor('roles.read');
-  if (gate.error) return gate.error;
-  return NextResponse.json(await rolePayload());
-}
-
-export async function POST(request: Request) {
-  const gate = await actor('roles.create');
-  if (gate.error) return gate.error;
-  const body = (await request.json()) as RoleInput;
-  const key = body.key?.trim().toLowerCase();
-  const name = body.name?.trim();
-  if (!key || !/^[a-z][a-z0-9_]{2,63}$/.test(key) || !name) {
-    return NextResponse.json({ error: 'Valid role key and name are required.' }, { status: 400 });
-  }
-
-  const sql = db();
-  try {
-    const created = (await sql`
-      insert into app.roles (key,name,description,is_system,is_active,created_by_person_id)
-      values (${key},${name},${body.description?.trim() || null},false,true,${gate.access!.personId}::uuid)
-      returning id::text
-    `) as unknown as Array<{ id: string }>;
-    const roleId = created[0].id;
-    const keys = Array.isArray(body.permissionKeys) ? [...new Set(body.permissionKeys)] : [];
-    for (const permissionKey of keys) {
-      await sql`
-        insert into app.role_permissions (role_id,permission_id,granted_by_person_id)
-        select ${roleId}::uuid,id,${gate.access!.personId}::uuid from app.permissions where key=${permissionKey}
-        on conflict do nothing
-      `;
-    }
-    await sql`insert into app.audit_logs(actor_person_id,action,object_type,object_id,after_data) values (${gate.access!.personId}::uuid,'role.create','role',${roleId}::uuid,${JSON.stringify({ key, name, permissionKeys: keys })}::jsonb)`;
-    return NextResponse.json(await rolePayload(), { status: 201 });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to create role';
-    return NextResponse.json({ error: message.includes('unique') ? 'Role key already exists.' : message }, { status: 400 });
-  }
-}
-
-export async function PATCH(request: Request) {
-  const gate = await actor('roles.update');
-  if (gate.error) return gate.error;
-  const body = (await request.json()) as RoleInput;
-  if (!body.id || !body.name?.trim()) return NextResponse.json({ error: 'Role id and name are required.' }, { status: 400 });
-
-  const sql = db();
-  const existing = (await sql`select id::text,key,name,description,is_system,is_active from app.roles where id=${body.id}::uuid limit 1`) as unknown as Array<Record<string, unknown>>;
-  if (!existing[0]) return NextResponse.json({ error: 'Role not found.' }, { status: 404 });
-  if (existing[0].is_system && body.isActive === false) return NextResponse.json({ error: 'System roles cannot be archived.' }, { status: 400 });
-
-  const keys = Array.isArray(body.permissionKeys) ? [...new Set(body.permissionKeys)] : [];
-  await sql`update app.roles set name=${body.name.trim()}, description=${body.description?.trim() || null}, is_active=${body.isActive ?? true}, updated_at=now() where id=${body.id}::uuid`;
-  await sql`delete from app.role_permissions where role_id=${body.id}::uuid`;
-  for (const permissionKey of keys) {
-    await sql`
-      insert into app.role_permissions (role_id,permission_id,granted_by_person_id)
-      select ${body.id}::uuid,id,${gate.access!.personId}::uuid from app.permissions where key=${permissionKey}
-      on conflict do nothing
-    `;
-  }
-  await sql`insert into app.audit_logs(actor_person_id,action,object_type,object_id,before_data,after_data) values (${gate.access!.personId}::uuid,'role.update','role',${body.id}::uuid,${JSON.stringify(existing[0])}::jsonb,${JSON.stringify({ name: body.name, description: body.description, isActive: body.isActive, permissionKeys: keys })}::jsonb)`;
-  return NextResponse.json(await rolePayload());
-}
-
-export async function DELETE(request: Request) {
-  const gate = await actor('roles.update');
-  if (gate.error) return gate.error;
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'Role id is required.' }, { status: 400 });
-  const sql = db();
-  const role = (await sql`select id::text,key,is_system,is_active from app.roles where id=${id}::uuid limit 1`) as unknown as Array<Record<string, unknown>>;
-  if (!role[0]) return NextResponse.json({ error: 'Role not found.' }, { status: 404 });
-  if (role[0].is_system) return NextResponse.json({ error: 'System roles cannot be archived.' }, { status: 400 });
-  await sql`update app.roles set is_active=false,updated_at=now() where id=${id}::uuid`;
-  await sql`insert into app.audit_logs(actor_person_id,action,object_type,object_id,before_data) values (${gate.access!.personId}::uuid,'role.archive','role',${id}::uuid,${JSON.stringify(role[0])}::jsonb)`;
-  return NextResponse.json(await rolePayload());
-}
+async function actor(requiredPermission: string) { const raw = (await auth.getSession()) as unknown as SessionResult; const user = raw.user ?? raw.data?.user ?? null; if (!user?.id) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }; const access = await accessForAuthUser(user.id); if (!hasPermission(access, requiredPermission)) return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }; return { access }; }
+async function sensitive(personId:string){const step=await requireStepUp(personId,'rbac.manage');return step?NextResponse.json(step,{status:428}):null;}
+async function rolePayload() { const sql = db(); const roles = (await sql`select r.id::text, r.key, r.name, r.description, r.is_system, r.is_active, coalesce(array_agg(p.key order by p.key) filter (where p.key is not null), '{}') as permission_keys from app.roles r left join app.role_permissions rp on rp.role_id = r.id left join app.permissions p on p.id = rp.permission_id group by r.id order by r.is_system desc, r.name`) as unknown as Array<Record<string, unknown>>; const permissions = (await sql`select id::text, key, domain, action, description, is_sensitive from app.permissions order by domain, key`) as unknown as Array<Record<string, unknown>>; return { roles, permissions }; }
+export async function GET() { const gate = await actor('roles.read'); if (gate.error) return gate.error; return NextResponse.json(await rolePayload()); }
+export async function POST(request: Request) { const gate = await actor('roles.create'); if (gate.error) return gate.error; const step=await sensitive(gate.access!.personId);if(step)return step; const body = (await request.json()) as RoleInput; const key = body.key?.trim().toLowerCase(); const name = body.name?.trim(); if (!key || !/^[a-z][a-z0-9_]{2,63}$/.test(key) || !name) return NextResponse.json({ error: 'Valid role key and name are required.' }, { status: 400 }); const sql = db(); try { const created = (await sql`insert into app.roles (key,name,description,is_system,is_active,created_by_person_id) values (${key},${name},${body.description?.trim() || null},false,true,${gate.access!.personId}::uuid) returning id::text`) as unknown as Array<{ id: string }>; const roleId = created[0].id; const keys = Array.isArray(body.permissionKeys) ? [...new Set(body.permissionKeys)] : []; for (const permissionKey of keys) await sql`insert into app.role_permissions (role_id,permission_id,granted_by_person_id) select ${roleId}::uuid,id,${gate.access!.personId}::uuid from app.permissions where key=${permissionKey} on conflict do nothing`; await sql`insert into app.audit_logs(actor_person_id,action,object_type,object_id,after_data) values (${gate.access!.personId}::uuid,'role.create','role',${roleId}::uuid,${JSON.stringify({ key, name, permissionKeys: keys })}::jsonb)`; return NextResponse.json(await rolePayload(), { status: 201 }); } catch (error) { const message = error instanceof Error ? error.message : 'Unable to create role'; return NextResponse.json({ error: message.includes('unique') ? 'Role key already exists.' : message }, { status: 400 }); } }
+export async function PATCH(request: Request) { const gate = await actor('roles.update'); if (gate.error) return gate.error; const step=await sensitive(gate.access!.personId);if(step)return step; const body = (await request.json()) as RoleInput; if (!body.id || !body.name?.trim()) return NextResponse.json({ error: 'Role id and name are required.' }, { status: 400 }); const sql = db(); const existing = (await sql`select id::text,key,name,description,is_system,is_active from app.roles where id=${body.id}::uuid limit 1`) as unknown as Array<Record<string, unknown>>; if (!existing[0]) return NextResponse.json({ error: 'Role not found.' }, { status: 404 }); if (existing[0].is_system && body.isActive === false) return NextResponse.json({ error: 'System roles cannot be archived.' }, { status: 400 }); const keys = Array.isArray(body.permissionKeys) ? [...new Set(body.permissionKeys)] : []; await sql`update app.roles set name=${body.name.trim()}, description=${body.description?.trim() || null}, is_active=${body.isActive ?? true}, updated_at=now() where id=${body.id}::uuid`; await sql`delete from app.role_permissions where role_id=${body.id}::uuid`; for (const permissionKey of keys) await sql`insert into app.role_permissions (role_id,permission_id,granted_by_person_id) select ${body.id}::uuid,id,${gate.access!.personId}::uuid from app.permissions where key=${permissionKey} on conflict do nothing`; await sql`insert into app.audit_logs(actor_person_id,action,object_type,object_id,before_data,after_data) values (${gate.access!.personId}::uuid,'role.update','role',${body.id}::uuid,${JSON.stringify(existing[0])}::jsonb,${JSON.stringify({ name: body.name, description: body.description, isActive: body.isActive, permissionKeys: keys })}::jsonb)`; return NextResponse.json(await rolePayload()); }
+export async function DELETE(request: Request) { const gate = await actor('roles.update'); if (gate.error) return gate.error; const step=await sensitive(gate.access!.personId);if(step)return step; const { searchParams } = new URL(request.url); const id = searchParams.get('id'); if (!id) return NextResponse.json({ error: 'Role id is required.' }, { status: 400 }); const sql = db(); const role = (await sql`select id::text,key,is_system,is_active from app.roles where id=${id}::uuid limit 1`) as unknown as Array<Record<string, unknown>>; if (!role[0]) return NextResponse.json({ error: 'Role not found.' }, { status: 404 }); if (role[0].is_system) return NextResponse.json({ error: 'System roles cannot be archived.' }, { status: 400 }); await sql`update app.roles set is_active=false,updated_at=now() where id=${id}::uuid`; await sql`insert into app.audit_logs(actor_person_id,action,object_type,object_id,before_data) values (${gate.access!.personId}::uuid,'role.archive','role',${id}::uuid,${JSON.stringify(role[0])}::jsonb)`; return NextResponse.json(await rolePayload()); }
