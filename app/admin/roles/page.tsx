@@ -25,7 +25,10 @@ export default async function RolesAdminPage() {
           <div className="text-xs text-white/45">{access?.membershipCode}</div>
         </div>
       </header>
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6"><RolesClient canCreate={hasPermission(access,'roles.create')} canUpdate={hasPermission(access,'roles.update')} /></div>
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+        {hasPermission(access,'roles.update')&&<div className="mb-6 flex justify-end"><Link href="/admin/scoped-roles" className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-sm font-semibold text-amber-100">Manage Scoped Roles</Link></div>}
+        <RolesClient canCreate={hasPermission(access,'roles.create')} canUpdate={hasPermission(access,'roles.update')} />
+      </div>
     </main>
   );
 }
