@@ -27,3 +27,49 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+
+  production-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      BASE_URL: https://togetherforever56.vercel.app
+    steps:
+      - name: Public landing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl --fail --silent --show-error --location "$BASE_URL/")"
+          grep -Fq 'Together Forever' <<<"$body"
+          grep -Fq 'Brotherhood • Est. 1977' <<<"$body"
+          grep -Fq 'Registered Members' <<<"$body"
+          grep -Fq '16 + 3 Officers' <<<"$body"
+          grep -Fq '© 2025 Together Forever. All rights reserved.' <<<"$body"
+
+      - name: Auth and reset routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$BASE_URL/auth/sign-in")" = "200"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$BASE_URL/auth/reset-password")" = "200"
+
+      - name: Health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl --fail --silent --show-error "$BASE_URL/api/health")"
+          grep -Fq '"ok":true' <<<"$body"
+          grep -Fq '"database":"connected"' <<<"$body"
+
+      - name: Protected APIs deny anonymous access
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in /api/admin/readiness /api/admin/communications /api/admin/finance /api/admin/roles; do
+            code="$(curl --silent --output /dev/null --write-out '%{http_code}' "$BASE_URL$path")"
+            if [[ "$code" != "401" && "$code" != "403" ]]; then
+              echo "$path returned $code; expected 401 or 403"
+              exit 1
+            fi
+          done
