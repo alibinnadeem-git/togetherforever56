@@ -24,6 +24,6 @@ export async function POST(request:Request){
     if(!created||Date.now()-created>5*60*1000)return NextResponse.json({error:'Re-authentication required. Sign out and sign back in, then retry this sensitive action.',code:'FRESH_SESSION_REQUIRED'},{status:428});
   }
   await s`insert into app.step_up_authorizations(person_id,purpose,method,expires_at,metadata) values(${access.personId}::uuid,${purpose},${method},now()+interval '10 minutes',${JSON.stringify({authUserId:user.id})}::jsonb)`;
-  await s`insert into app.security_events(person_id,event_type,severity,metadata) values(${access.personId}::uuid,'step_up_authorized','info',${JSON.stringify({purpose,method})}::jsonb)`;
+  await s`insert into app.security_events(person_id,auth_user_id,event_type,risk_level,metadata) values(${access.personId}::uuid,${user.id},'step_up_authorized','low',${JSON.stringify({purpose,method})}::jsonb)`;
   return NextResponse.json({ok:true,purpose,method,expiresInSeconds:600});
 }
