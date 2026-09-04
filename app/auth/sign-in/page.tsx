@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { Shield, LogIn, ArrowLeft, KeyRound } from 'lucide-react';
 import { authClient } from '../../../lib/auth/client';
 
+const RESET_REDIRECT='https://togetherforever56.vercel.app/auth/reset-password';
+
 export default function SignInPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -30,7 +32,7 @@ export default function SignInPage() {
     if(!email.trim()){setError('Enter your email first.');return;}
     setResetBusy(true);
     try{
-      const result=await authClient.requestPasswordReset({email:email.trim(),redirectTo:`${window.location.origin}/auth/reset-password`});
+      const result=await authClient.requestPasswordReset({email:email.trim(),redirectTo:RESET_REDIRECT});
       if(result.error){setError(result.error.message||'Unable to send password setup email.');return;}
       setMessage('Check your email for the secure password setup/reset link.');
     }catch{setError('Unable to send password setup email. Please try again.');}
